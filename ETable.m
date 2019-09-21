@@ -389,10 +389,10 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             phs = [];
             leg = {}; % legend entries
             hold on
-                for i = 2:nargin
+                for i = 1:(nargin-2)
                     nameY = varargin{i};
                     phs(end+1) = obj.plot(nameX, nameY);
-                    fullName = obj.cosmeticFullName(nameX); % Fetch full names
+                    fullName = obj.cosmeticFullName(nameY); % Fetch full names
                     fullName(regexp(fullName,'[\n\r]')) = []; % Remove linebreaks
                     leg{i} = fullName;
                 end
