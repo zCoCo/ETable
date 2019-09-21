@@ -386,6 +386,7 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
         % Short Names against the First Variable.
         % Returns the plot handles.
         function phs = multiplot(obj, nameX, varargin)
+            disp("MULTIPLOT");
             phs = [];
             leg = {}; % legend entries
             hold on
