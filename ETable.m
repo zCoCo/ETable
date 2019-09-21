@@ -387,12 +387,23 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
         % Returns the plot handles.
         function phs = multiplot(obj, nameX, varargin)
             phs = [];
+            leg = {}; % legend entries
             hold on
                 for i = 2:nargin
                     nameY = varargin{i};
                     phs(end+1) = obj.plot(nameX, nameY);
+                    fullName = obj.cosmeticFullName(nameX); % Fetch full names
+                    fullName(regexp(fullName,'[\n\r]')) = []; % Remove linebreaks
+                    leg{i} = fullName;
                 end
             hold off
+            % Label Axes:
+            fullNameX = obj.cosmeticFullName(nameX); % Fetch full names
+            fullNameX(regexp(fullNameX,'[\n\r]')) = []; % Remove linebreaks
+            xlabel(fullNameX, 'Interpreter', 'latex');
+            ylabel('Output', 'Interpreter', 'latex');
+            % Add Legend:
+            legend(leg, 'Interpreter', 'latex');
         end
         
         % Produces a Stylized Plot of the Two Variables with the Given
