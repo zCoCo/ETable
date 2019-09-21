@@ -382,6 +382,19 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             obj.label(nameX, nameY);
         end
         
+        % Produces a Stylized Plot of the All the Variables with the Given
+        % Short Names against the First Variable.
+        % Returns the plot handles.
+        function phs = multiplot(obj, nameX, varargin)
+            phs = [];
+            hold on
+                for i = 2:nargin
+                    nameY = varargin{i};
+                    phs(end+1) = obj.plot(nameX, nameY);
+                end
+            hold off
+        end
+        
         % Produces a Stylized Plot of the Two Variables with the Given
         % Short Names Subject to the Given Range with Vertical Error Bars 
         % from the Variable with the Short Name nameE. Errorbars will only 
