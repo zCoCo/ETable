@@ -174,12 +174,17 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
         % Given Short Name, colY, as a Function of the Column with the
         % Given Short Name, colX, over the given range. Range must only
         % include one section of free-oscillation and nothing else.
-        % Returns damping ratio, z, the natural frequency wn, and the
-        % location of all the peaks identified as a struct with parameters
-        % X and Y.
-        function [z, wn, peaks]  = logdec(obj, colX,colY, range)
-            xs = obj.get(colX); xs = xs(range);
-            ys = obj.get(colY); ys = ys(range);
+        % Returns damping ratio, z, the natural frequency wn, equilibrium 
+        % position (steady-state value), and the location of all the peaks 
+        % identified as a struct with parameters X and Y.
+        function [z, wn, peaks, equilibrium]  = logdec(obj, colX,colY, range)
+            xs = obj.get(colX); 
+            ys = obj.get(colY);
+            
+            if nargin > 3
+                xs = xs(range);
+                ys = ys(range);
+            end
             
             peaks = struct('X',[],'Y',[]);
             % Perform a basic first pass to assess the data:
@@ -189,10 +194,11 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             % a selected prominence value (to avoid detecting noise at the
             % peaks as multiple separate peaks).
             equilibrium = ys(end); % Steady-state value.
+            peaks.Y = peaks.Y(peaks.Y > equilibrium); % Filter out noise peaks at near minima
             prominence = peaks.Y - equilibrium; % Half-Prominence of all peaks
             % Take limit prominence as that of the half-prominence of the
             % middle peak or the fourth (want at least 4 peaks):
-            medianPeak = max(numel(peaks.Y)/2,4);
+            medianPeak = max(floor(numel(peaks.Y)/2),4);
             prominence = prominence(medianPeak);
             % Reassess Peaks:
             [peaks.Y, peaks.X] = findpeaks(ys, xs, 'MinPeakProminence',prominence);
@@ -201,14 +207,15 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             % Average across all possible spans with at least 3 peaks to 
             % try to eliminate effects of any errant peaks:
             if(numel(peaks.Y) < 3)
-                warning('Not enough peaks to perform logarithmic decrement.');
+                error('Not enough peaks to perform logarithmic decrement.');
             else
-                ds = []; % deltas
+                zs = [];
+                peaksRel = peaks.Y - equilibrium;
                 for i = 2:numel(peaks.Y)
-                    ds(end+1) = ln(peaks.Y(1)/peaks.Y(i)) / (i-1);
+                    d = log(peaksRel(1)/peaksRel(i)) / (i-1);
+                    zs(end+1) = d / sqrt(4*pi^2 + d^2);
                 end
-                d = mean(ds);
-                z = d / sqrt(4*pi^2 + d^2);
+                z = mean(zs);
                 
                 % Collect Associated Values:
                 Td = mean(diff(peaks.X)); % Average Damped Period
