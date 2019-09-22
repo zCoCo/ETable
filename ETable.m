@@ -177,31 +177,56 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
         % Returns damping ratio, z, the natural frequency wn, equilibrium 
         % position (steady-state value), and the location of all the peaks 
         % identified as a struct with parameters X and Y.
-        function [z, wn, peaks, equilibrium]  = logdec(obj, colX,colY, range)
-            xs = obj.get(colX); 
-            ys = obj.get(colY);
+        % Can be tuned to reject more peaks by adjusting the quantile
+        % fraction chosen in prominences selection (default is 0.5).
+        function [z, wn, peaks, equilibrium]  = logdec(obj, colX,colY, range, tuning)
+            xs = obj.get(char(colX));
+            ys = obj.get(char(colY));
             
             if nargin > 3
                 xs = xs(range);
                 ys = ys(range);
             end
+            if nargin < 4
+                tuning = 0.5;
+            end
             
             peaks = struct('X',[],'Y',[]);
             % Perform a basic first pass to assess the data:
-            [peaks.Y, peaks.X] = findpeaks(ys, xs); % Find all local maxima
+            peaks.Y = findpeaks(ys, xs); % Find all local maxima
+            
+            if(numel(peaks.Y) < 4)
+                error('Not enough peaks to perform logarithmic decrement.');
+            end
             
             % Only select peaks which have gone down and back up again by
             % a selected prominence value (to avoid detecting noise at the
             % peaks as multiple separate peaks).
             equilibrium = ys(end); % Steady-state value.
-            peaks.Y = peaks.Y(peaks.Y > equilibrium); % Filter out noise peaks at near minima
+            peaks.Y = peaks.Y(peaks.Y > equilibrium); % Filter out noise peaks near minima
             prominence = peaks.Y - equilibrium; % Half-Prominence of all peaks
-            % Take limit prominence as that of the half-prominence of the
-            % middle peak or the fourth (want at least 4 peaks):
-            medianPeak = max(floor(numel(peaks.Y)/2),4);
-            prominence = prominence(medianPeak);
+            % Take a prominence (mean of the half-prominences), but make 
+            % sure there end up being at least 4 peaks left:
+            prominence = min( mean([quantile(prominence,tuning), mean(prominence)]), prominence(4) );
             % Reassess Peaks:
             [peaks.Y, peaks.X] = findpeaks(ys, xs, 'MinPeakProminence',prominence);
+            % Filter out really obvious noise peaks near minima (there
+            % really shouldn't be any here at this point but just in case):
+            valid = peaks.Y > equilibrium;
+            peaks.Y = peaks.Y(valid);
+            peaks.X = peaks.X(valid);
+            Td = mean(diff(peaks.X)); % Underestimate on Average Damped Period
+            
+            [peaks.Y, peaks.X] = findpeaks(ys, xs, 'MinPeakProminence',prominence, 'MinPeakDistance',0.6*Td); % just over half-period
+            % Filter out really obvious noise peaks near minima (there
+            % really shouldn't be any here at this point but just in case):
+            valid = peaks.Y > equilibrium;
+            peaks.Y = peaks.Y(valid);
+            peaks.X = peaks.X(valid);
+            
+            % Do one final pass filtering out any multiple recognitions of
+            % a peak when the signal is still at high amplitude (these can
+            % make it through the above filters):
             
             % Perform Logarithmic Decrement:
             % Average across all possible spans with at least 3 peaks to 
@@ -385,21 +410,23 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             end
             
             % Plot Data:
+            hold on
             ph = plot(xs(range), ys(range), format);
+            hold off
             obj.label(nameX, nameY);
         end
         
         % Produces a Stylized Plot of the All the Variables with the Given
         % Short Names against the First Variable.
         % Returns the plot handles.
-        function phs = multiplot(obj, nameX, varargin)
-            disp("MULTIPLOT");
+        function phs = multiplot(obj, style, nameX, varargin)
             phs = [];
             leg = {}; % legend entries
+            xs = obj.get(char(nameX));
             hold on
-                for i = 1:(nargin-2)
+                for i = 1:(nargin-3)
                     nameY = varargin{i};
-                    phs(end+1) = obj.plot(nameX, nameY);
+                    phs(end+1) = obj.plot(nameX, nameY, xs==xs, style); % Plot as lines (requires specifying range for all points)
                     fullName = obj.cosmeticFullName(nameY); % Fetch full names
                     fullName(regexp(fullName,'[\n\r]')) = []; % Remove linebreaks
                     leg{i} = fullName;
@@ -436,7 +463,9 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             end
             
             % Plot Data:
+            hold on
             eph = errorbar(xs(range), ys(range), ebars(range), format);
+            hold off
             
             obj.label(nameX, nameY);
         end
@@ -477,7 +506,9 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             end
             
             % Plot Data:
+            hold on
             eph = errorbar(xps, yps, eyps/2, eyps/2, exps/2, exps/2, 'o-');
+            hold off
             eph.MarkerSize = eph.MarkerSize / 2;
             
             obj.label(nameX, nameY);
@@ -494,7 +525,7 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             ylabel(fullNameY, 'Interpreter', 'latex');
         end
         
-        % Convenience function that marks the last data point meeting the
+        % Convenience function that marks the last data point
         % where the variables in the varargin list are within 5% of their
         % associated values in the current plot of nameY vs nameX. Each 
         % datapoint is labeled with the conditionals then the coordinates 
