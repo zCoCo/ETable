@@ -124,132 +124,7 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             obj.data{:, end+1} = num2cell(vs); % use full name for table headers
             obj.rename(sn, n); % Set all names
         end
-
-        % Adds a Column to This Table where Each Entry is Interpolated
-        % As a Value from colX -> colY in the src Table where Column X in
-        % This Table is used as the Reference Value.
-        % N.B.: All columns given as shortNames.
-        % ex. T1.interp('Pressure in Valve B', 'Pb', PvsT_Table, 'T', 'P', 'Tb');
-        function interp(obj, n, sn, src, colX, colY, x)
-            % TODO: add 'extrap' to interp1 or strict boundary cutoffs  
-            % (however that would be implemented for arbitrary datasets 
-            % which might not be monotonic... or is it ideal for this to 
-            % spit out NaN for OOB issues? 
-            obj.add(n,sn, interp1(src.get(colX), src.get(colY), obj.get(x), 'linear'));
-        end
-        % Same as interp but Steals name and short name from colY of source
-        % table.
-        function interpS(obj, src, colX, colY, x)
-            obj.interp(src.cosmeticFullName(colY),colY, colX, colY, x);
-        end
-        
-        % Same as #interp but in quasi-2D (ie. stacked tables as in the
-        % Thermodynamics textbook).
-        function interpQ2(obj, n, sn, src, colX,colY,colV, x,y)
-            xs = obj.get(x);
-            ys = obj.get(y);
-            vs = zeros(size(ys));
-            for i = 1:numel(ys)
-                Xs = src.get(colX);
-                Ys = src.get(colY);
-                Vs = src.get(colV);
-                
-                y_low = max(Ys(Ys < ys(i)));
-                low = Ys == y_low;
-                v_low = interp1(Xs(low), Vs(low), xs(i), 'linear');
-                
-                y_high = min(Ys(Ys >= ys(i)));
-                high = Ys == y_high;
-                v_high = interp1(Xs(high), Vs(high), xs(i), 'linear');
-                
-                vs(i) = (ys(i) - y_low)*(v_high - v_low)/(y_high - y_low) + v_low;
-            end
             
-            obj.add(n,sn, vs);
-        end
-        
-        % Performs Logarithmic Decrement for a Signal Experiencing
-        % Free-Vibration.
-        % Returns the Damping Ratio, z, for the Data in the Column with the
-        % Given Short Name, colY, as a Function of the Column with the
-        % Given Short Name, colX, over the given range. Range must only
-        % include one section of free-oscillation and nothing else.
-        % Returns damping ratio, z, the natural frequency wn, equilibrium 
-        % position (steady-state value), and the location of all the peaks 
-        % identified as a struct with parameters X and Y.
-        % Can be tuned to reject more peaks by adjusting the quantile
-        % fraction chosen in prominences selection (default is 0.5).
-        function [z, wn, peaks, equilibrium]  = logdec(obj, colX,colY, range, tuning)
-            xs = obj.get(char(colX));
-            ys = obj.get(char(colY));
-            
-            if nargin > 3
-                xs = xs(range);
-                ys = ys(range);
-            end
-            if nargin < 4
-                tuning = 0.5;
-            end
-            
-            peaks = struct('X',[],'Y',[]);
-            % Perform a basic first pass to assess the data:
-            peaks.Y = findpeaks(ys, xs); % Find all local maxima
-            
-            if(numel(peaks.Y) < 4)
-                error('Not enough peaks to perform logarithmic decrement.');
-            end
-            
-            % Only select peaks which have gone down and back up again by
-            % a selected prominence value (to avoid detecting noise at the
-            % peaks as multiple separate peaks).
-            equilibrium = ys(end); % Steady-state value.
-            peaks.Y = peaks.Y(peaks.Y > equilibrium); % Filter out noise peaks near minima
-            prominence = peaks.Y - equilibrium; % Half-Prominence of all peaks
-            % Take a prominence (mean of the half-prominences), but make 
-            % sure there end up being at least 4 peaks left:
-            prominence = min( mean([quantile(prominence,tuning), mean(prominence)]), prominence(4) );
-            % Reassess Peaks:
-            [peaks.Y, peaks.X] = findpeaks(ys, xs, 'MinPeakProminence',prominence);
-            % Filter out really obvious noise peaks near minima (there
-            % really shouldn't be any here at this point but just in case):
-            valid = peaks.Y > equilibrium;
-            peaks.Y = peaks.Y(valid);
-            peaks.X = peaks.X(valid);
-            Td = mean(diff(peaks.X)); % Underestimate on Average Damped Period
-            
-            [peaks.Y, peaks.X] = findpeaks(ys, xs, 'MinPeakProminence',prominence, 'MinPeakDistance',0.6*Td); % just over half-period
-            % Filter out really obvious noise peaks near minima (there
-            % really shouldn't be any here at this point but just in case):
-            valid = peaks.Y > equilibrium;
-            peaks.Y = peaks.Y(valid);
-            peaks.X = peaks.X(valid);
-            
-            % Do one final pass filtering out any multiple recognitions of
-            % a peak when the signal is still at high amplitude (these can
-            % make it through the above filters):
-            
-            % Perform Logarithmic Decrement:
-            % Average across all possible spans with at least 3 peaks to 
-            % try to eliminate effects of any errant peaks:
-            if(numel(peaks.Y) < 3)
-                error('Not enough peaks to perform logarithmic decrement.');
-            else
-                zs = [];
-                peaksRel = peaks.Y - equilibrium;
-                for i = 2:numel(peaks.Y)
-                    d = log(peaksRel(1)/peaksRel(i)) / (i-1);
-                    zs(end+1) = d / sqrt(4*pi^2 + d^2);
-                end
-                z = mean(zs);
-                
-                % Collect Associated Values:
-                Td = mean(diff(peaks.X)); % Average Damped Period
-                wd = 2*pi/Td; % Damped Natural Frequency
-                wn = wd / sqrt(1-z^2); % Natural Frequency
-            end
-        end
-            
-        
         % Edits the Given Column with the Given Short Name by replacing its
         % values with the given new values:
         function edit(obj, sn, newVals)
@@ -383,6 +258,130 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             sub.Properties.VariableDescriptions = obj.data.Properties.VariableDescriptions;
             ST.data = sub;
         end
+
+        % Adds a Column to This Table where Each Entry is Interpolated
+        % As a Value from colX -> colY in the src Table where Column X in
+        % This Table is used as the Reference Value.
+        % N.B.: All columns given as shortNames.
+        % ex. T1.interp('Pressure in Valve B', 'Pb', PvsT_Table, 'T', 'P', 'Tb');
+        function interp(obj, n, sn, src, colX, colY, x)
+            % TODO: add 'extrap' to interp1 or strict boundary cutoffs  
+            % (however that would be implemented for arbitrary datasets 
+            % which might not be monotonic... or is it ideal for this to 
+            % spit out NaN for OOB issues? 
+            obj.add(n,sn, interp1(src.get(colX), src.get(colY), obj.get(x), 'linear'));
+        end
+        % Same as interp but Steals name and short name from colY of source
+        % table.
+        function interpS(obj, src, colX, colY, x)
+            obj.interp(src.cosmeticFullName(colY),colY, colX, colY, x);
+        end
+        
+        % Same as #interp but in quasi-2D (ie. stacked tables as in the
+        % Thermodynamics textbook).
+        function interpQ2(obj, n, sn, src, colX,colY,colV, x,y)
+            xs = obj.get(x);
+            ys = obj.get(y);
+            vs = zeros(size(ys));
+            for i = 1:numel(ys)
+                Xs = src.get(colX);
+                Ys = src.get(colY);
+                Vs = src.get(colV);
+                
+                y_low = max(Ys(Ys < ys(i)));
+                low = Ys == y_low;
+                v_low = interp1(Xs(low), Vs(low), xs(i), 'linear');
+                
+                y_high = min(Ys(Ys >= ys(i)));
+                high = Ys == y_high;
+                v_high = interp1(Xs(high), Vs(high), xs(i), 'linear');
+                
+                vs(i) = (ys(i) - y_low)*(v_high - v_low)/(y_high - y_low) + v_low;
+            end
+            
+            obj.add(n,sn, vs);
+        end
+        
+        % Performs Logarithmic Decrement for a Signal Experiencing
+        % Free-Vibration.
+        % Returns the Damping Ratio, z, for the Data in the Column with the
+        % Given Short Name, colY, as a Function of the Column with the
+        % Given Short Name, colX, over the given range. Range must only
+        % include one section of free-oscillation and nothing else.
+        % Returns damping ratio, z, the natural frequency wn, equilibrium 
+        % position (steady-state value), and the location of all the peaks 
+        % identified as a struct with parameters X and Y.
+        % Can be tuned to reject more peaks by adjusting the quantile
+        % fraction chosen in prominences selection (default is 0.5).
+        function [z, wn, peaks, equilibrium] = logdec(obj, colX,colY, range, tuning)
+            xs = obj.get(char(colX));
+            ys = obj.get(char(colY));
+            
+            if nargin > 3
+                xs = xs(range);
+                ys = ys(range);
+            end
+            if nargin < 5
+                tuning = 0.5;
+            end
+            
+            peaks = struct('X',[],'Y',[]);
+            % Perform a basic first pass to assess the data:
+            peaks.Y = findpeaks(ys, xs); % Find all local maxima
+            
+            if(numel(peaks.Y) < 4)
+                error('Not enough peaks to perform logarithmic decrement.');
+            end
+            
+            % Only select peaks which have gone down and back up again by
+            % a selected prominence value (to avoid detecting noise at the
+            % peaks as multiple separate peaks).
+            equilibrium = ys(end); % Steady-state value.
+            peaks.Y = peaks.Y(peaks.Y > equilibrium); % Filter out noise peaks near minima
+            prominence = peaks.Y - equilibrium; % Half-Prominence of all peaks
+            % Take a prominence (mean of the half-prominences), but make 
+            % sure there end up being at least 4 peaks left:
+            prominence = min( mean([quantile(prominence,tuning), mean(prominence)]), prominence(4) );
+            % Reassess Peaks:
+            [peaks.Y, peaks.X] = findpeaks(ys, xs, 'MinPeakProminence',prominence);
+            % Filter out really obvious noise peaks near minima (there
+            % really shouldn't be any here at this point but just in case):
+            valid = peaks.Y > equilibrium;
+            peaks.Y = peaks.Y(valid);
+            peaks.X = peaks.X(valid);
+            Td = mean(diff(peaks.X)); % Underestimate on Average Damped Period
+            
+            [peaks.Y, peaks.X] = findpeaks(ys, xs, 'MinPeakProminence',prominence, 'MinPeakDistance',0.6*Td); % just over half-period
+            % Filter out really obvious noise peaks near minima (there
+            % really shouldn't be any here at this point but just in case):
+            valid = peaks.Y > equilibrium;
+            peaks.Y = peaks.Y(valid);
+            peaks.X = peaks.X(valid);
+            
+            % Do one final pass filtering out any multiple recognitions of
+            % a peak when the signal is still at high amplitude (these can
+            % make it through the above filters):
+            
+            % Perform Logarithmic Decrement:
+            % Average across all possible spans with at least 3 peaks to 
+            % try to eliminate effects of any errant peaks:
+            if(numel(peaks.Y) < 3)
+                error('Not enough peaks to perform logarithmic decrement.');
+            else
+                zs = [];
+                peaksRel = peaks.Y - equilibrium;
+                for i = 2:numel(peaks.Y)
+                    d = log(peaksRel(1)/peaksRel(i)) / (i-1);
+                    zs(end+1) = d / sqrt(4*pi^2 + d^2);
+                end
+                z = mean(zs);
+                
+                % Collect Associated Values:
+                Td = mean(diff(peaks.X)); % Average Damped Period
+                wd = 2*pi/Td; % Damped Natural Frequency
+                wn = wd / sqrt(1-z^2); % Natural Frequency
+            end
+        end
         
         % Function Summary, displays and returns a summary table of the 
         % mean values of all variables in each of the given ranges.
@@ -396,13 +395,23 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
         
         % Produces a Stylized Plot of the Two Variables with the Given
         % Short Names Subject to the Given Range. Returns the plot handle.
-        function ph = plot(obj, nameX, nameY, range, format)
+        % Shifts all values along the x-axis by shiftX and along the y-axis
+        % by shiftY.
+        function ph = plot(obj, nameX, nameY, range, format, shiftX, shiftY)
             if nargin < 5
                 format = 'o-';
             end
+            
+            if nargin < 6
+                shiftX = 0;
+            end
+            if nargin < 7
+                shiftY = 0;
+            end
+            
             % Obtain Data:
-            xs = obj.get(char(nameX));
-            ys = obj.get(char(nameY));
+            xs = obj.get(char(nameX)) + shiftX;
+            ys = obj.get(char(nameY)) + shiftY;
             
             % Determine Range:
             if nargin < 4
