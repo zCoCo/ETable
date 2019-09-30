@@ -339,7 +339,7 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             % Perform a basic first pass to assess the data:
             peaks.Y = findpeaks(ys, xs); % Find all local maxima
             
-            if(numel(peaks.Y) < 4)
+            if(numel(peaks.Y) < 3)
                 error('Not enough peaks to perform logarithmic decrement.');
             end
             
@@ -376,6 +376,9 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             % Average across all possible spans with at least 3 peaks to 
             % try to eliminate effects of any errant peaks:
             if(numel(peaks.Y) < 3)
+                warning('Not enough peaks to perform logarithmic decrement well.');
+            end
+            if(numel(peaks.Y) < 2)
                 error('Not enough peaks to perform logarithmic decrement.');
             else
                 zs = [];
