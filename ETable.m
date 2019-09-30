@@ -96,6 +96,16 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             obj.unitsList = repmat("", 1,width(obj.data));
         end % ctor
         
+        % Returns a list that is true for each row of the data table (for
+        % selecting all rows
+        function t = true(obj)
+            t = true(height(obj.data), 1);
+        end
+        % Alias for #true
+        function ar = allrows(obj)
+            ar = obj.true();
+        end
+        
         % Helper Function which Returns the Full Variable Name, as a Valid 
         % Variable Name, Associated with the Given shortName:
         function vfn = validFullName(obj, shortName)
@@ -374,12 +384,29 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
                     d = log(peaksRel(1)/peaksRel(i)) / (i-1);
                     zs(end+1) = d / sqrt(4*pi^2 + d^2);
                 end
-                z = mean(zs);
+                
+                % Choose the z from zs which creates an envelope that 
+                % best fits the peaks (minimum least squared error):
+                lses = []; % Least Squared Error of Each z value in zs
+                for i = 1:numel(zs)
+                    lses(i) = sum((peaks.Y - envelope(peaks.X, zs(i))).^2);
+                end
+                [~, minIdx] = min(lses);
+                z = zs(minIdx);
                 
                 % Collect Associated Values:
                 Td = mean(diff(peaks.X)); % Average Damped Period
                 wd = 2*pi/Td; % Damped Natural Frequency
                 wn = wd / sqrt(1-z^2); % Natural Frequency
+            end
+            
+            % Helper function that returns a function for plotting an 
+            % envelope for a given z.
+            function e = envelope(t,z)
+                ttd = mean(diff(peaks.X)); % Average Damped Period
+                wwd = 2*pi/ttd; % Damped Natural Frequency
+                wwn = wwd / sqrt(1-z^2); % Natural Frequency
+                e = (equilibrium + (peaks.Y(1)-equilibrium)*exp(-z.*wwn.*(t-peaks.X(1))))./sqrt(1-z^2);
             end
         end
         
