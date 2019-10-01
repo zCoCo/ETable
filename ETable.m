@@ -346,7 +346,7 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             % Only select peaks which have gone down and back up again by
             % a selected prominence value (to avoid detecting noise at the
             % peaks as multiple separate peaks).
-            equilibrium = ys(end); % Steady-state value.
+            equilibrium = ys(end); % Assumed Steady-state value.
             peaks.Y = peaks.Y(peaks.Y > equilibrium); % Filter out noise peaks near minima
             prominence = peaks.Y - equilibrium; % Half-Prominence of all peaks
             % Take a prominence (mean of the half-prominences), but make 
@@ -465,7 +465,7 @@ classdef ETable < dynamicprops & matlab.mixin.SetGet
             hold on
                 for i = 1:(nargin-3)
                     nameY = varargin{i};
-                    phs(end+1) = obj.plot(nameX, nameY, xs==xs, style); % Plot as lines (requires specifying range for all points)
+                    phs(end+1) = obj.plot(nameX, nameY, obj.true(), style); % Plot as lines (requires specifying range for all points)
                     fullName = obj.cosmeticFullName(nameY); % Fetch full names
                     fullName(regexp(fullName,'[\n\r]')) = []; % Remove linebreaks
                     leg{i} = fullName;
